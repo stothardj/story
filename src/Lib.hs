@@ -1,10 +1,11 @@
 module Lib
-    ( runStory, story, tellStoryBlock, tellStory
+    ( runStory, story, tellStory
     ) where
 
 import Text.ParserCombinators.Parsec
 import Text.Read (readMaybe)
 import qualified Data.Map.Strict as Map
+import System.IO (hFlush, stdout)
 
 data StoryOption = StoryOption {
   optionLabel :: String,
@@ -31,6 +32,7 @@ storyOption = do
   char '*'
   lbl <- many lower
   char '*'
+  many space
   text <- many (noneOf "\n")
   char '\n'
   return $ StoryOption lbl text
@@ -61,15 +63,18 @@ story = do
   where
     indexBlock b = (blockLabel b, b)
 
+tellStoryOptions :: [StoryOption] -> IO ()
+tellStoryOptions [option] = putStrLn (optionText option)
+tellStoryOptions options = mapM_ putStrLn optionStrings
+  where
+    optionStrings = zipWith prefixNumber [1..] (map optionText options)
+    prefixNumber n str = show n ++ ". " ++ str
+
 tellStoryBlock :: StoryBlock -> IO ()
 tellStoryBlock blk = do
   putStr $ blockText blk
-  putStrLn "----------------"
-  mapM_ putStrLn optionStrings
-  where
-    blkOptions = blockOptions blk
-    optionStrings = zipWith prefixNumber [1..] (map optionText blkOptions)
-    prefixNumber n str = show n ++ ". " ++ str
+  getLine
+  tellStoryOptions (blockOptions blk)
   
 tellStory :: String -> Story -> IO ()
 tellStory "end" _ = putStrLn "The End."
@@ -80,12 +85,15 @@ tellStory lbl stry = do
     Just blk -> do tellStoryBlock blk
                    let opts = blockOptions blk
                    optN <- readStoryOption $ length opts
+                   putStrLn ""
                    tellStory (optionLabel $ opts !! optN) stry
 
 readStoryOption :: Int -> IO (Int)
--- No use asking if there's only one choice.
-readStoryOption 1 = return 0
+-- No use asking if there's only one choice. Still read input to pause.
+readStoryOption 1 = getLine >> return 0
 readStoryOption maxChoice = do
+  putStr $ "Enter an option (1-" ++ (show maxChoice) ++ "): "
+  hFlush stdout
   line <- getLine
   case (readMaybe line :: Maybe Int) of
     Nothing -> tryAgain
